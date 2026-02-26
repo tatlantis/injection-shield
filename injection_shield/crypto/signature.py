@@ -5,7 +5,13 @@ from datetime import datetime
 
 
 class TrustedIdentity:
-    """Represents a trusted identity that can sign commands"""
+    """
+    Represents a trusted identity that can sign commands.
+
+    A TrustedIdentity holds an Ed25519 keypair. Commands signed with
+    its private key can be verified by anyone with the public key.
+    Only signed-and-verified commands are allowed to execute.
+    """
 
     def __init__(self, name: str):
         self.name = name
@@ -13,6 +19,12 @@ class TrustedIdentity:
         self.verify_key = self.signing_key.verify_key
 
     def sign_command(self, command: str, metadata: dict = None) -> dict:
+        """
+        Sign a command string with this identity's private key.
+
+        Returns a dict containing the command, metadata, signature,
+        and public verify key — ready to pass to an @protect-decorated agent.
+        """
         if metadata is None:
             metadata = {}
         metadata['timestamp'] = datetime.utcnow().isoformat()
@@ -33,6 +45,13 @@ class TrustedIdentity:
 
 
 def verify_signature(signed_command: dict) -> tuple:
+    """
+    Verify a signed command dict.
+
+    Returns (True, "Signature valid") if the command is authentic
+    and unmodified, or (False, reason) if it has been tampered with
+    or is otherwise invalid.
+    """
     try:
         verify_key = nacl.signing.VerifyKey(
             signed_command['verify_key'],
@@ -48,23 +67,3 @@ def verify_signature(signed_command: dict) -> tuple:
         return (True, "Signature valid")
     except Exception as e:
         return (False, f"Signature invalid: {str(e)}")
-
-
-if __name__ == "__main__":
-    print("=== InjectionShield - Core Cryptographic Layer ===\n")
-
-    # [1] Create a trusted identity and sign a command
-    fred = TrustedIdentity("fred")
-    signed = fred.sign_command("execute: analyze_document.py")
-    print("[1] Signed command:", json.dumps(signed, indent=2))
-
-    # [2] Verify the legitimate command
-    is_valid, message = verify_signature(signed)
-    print(f"\n[2] Verification: {is_valid} — {message}")
-
-    # [3] Simulate injection attack: tamper with the command
-    signed['command'] = "execute: malicious_script.py"
-    is_valid, message = verify_signature(signed)
-    print(f"\n[3] Injection attempt detected: {is_valid} — {message}")
-
-    print("\nCore layer working. Injection cannot execute without a valid signature.")
