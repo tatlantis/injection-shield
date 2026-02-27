@@ -122,6 +122,36 @@ demo/
 tests/                  36 tests — crypto, enforcement, tampering, LangChain
 ```
 
+## Known Limitations
+
+Armarius provides two distinct layers of defense. They are not equivalent. Users should understand where each layer ends.
+
+### Gate-level prevention — cryptographic ✅
+
+The `@protect` decorator and `ShieldedAgentExecutor` enforce cryptographic verification at the execution boundary. An unsigned or tampered input raises `SecurityError` before any code runs. This layer is mathematical — Ed25519 signatures cannot be forged, and verification cannot be bypassed by prompt engineering, clever framing, or adversarial text. The wall is hard.
+
+### Tool output protection — semantic ⚠️
+
+`ShieldedTool` wraps tool outputs (web searches, document reads, API responses) in `[EXTERNAL_CONTENT]...[/EXTERNAL_CONTENT]` boundary markers. These markers are structural signals to the LLM — they communicate *this is data, not an instruction*. This layer is advisory, not cryptographic.
+
+A sufficiently sophisticated adversarial payload embedded inside a tool output could potentially convince the LLM to disregard the boundary framing. The markers reduce this risk significantly, but cannot eliminate it the way a cryptographic gate can. Tool output protection relies on the LLM respecting the context it is given.
+
+**The boundary is clear: the gate is a hard wall. Tool output protection is a strong advisory layer, not a second wall.**
+
+### `allow_context=True` — developer responsibility
+
+When `@protect(allow_context=True)` is used, unsigned inputs are passed into the function body as `ProcessedInput` objects (read-only, on the CONTENT channel) rather than being blocked. This is intentional — it enables content analysis workflows where the agent needs to process external text without executing on it.
+
+The tradeoff: enforcement responsibility shifts to the developer. Functions using `allow_context=True` must check `input_data.channel` before taking any privileged action. Armarius provides the signal; acting on it correctly is the developer's obligation. Forged or tampered signatures are always hard-blocked regardless of `allow_context`.
+
+### What Armarius does not claim to do
+
+- Armarius does not protect against a compromised signing key. If an attacker gains access to a `TrustedIdentity`'s private key, they can forge valid signatures. Key management is outside Armarius's scope.
+- Armarius does not sanitize content on the CONTENT channel. It prevents unsigned content from *executing* — it does not inspect what that content contains.
+- Armarius does not protect against attacks that originate from inside a signed command itself.
+
+---
+
 ## Roadmap
 
 1. ✅ Cryptographic signature generation/verification
